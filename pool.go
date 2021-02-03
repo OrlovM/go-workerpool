@@ -5,35 +5,35 @@ import (
 )
 
 type Pool struct {
-	tasks           chan *Task
+	in              chan Task
 	concurrency     int
-	results         chan *Result
-	resultsChannels []chan *Result
+	out             chan Task
+	resultsChannels []chan Task
 	wg              sync.WaitGroup
 }
 
-func NewPool(tasks chan *Task, results chan *Result, concurrency int) *Pool {
-	resChan := make([]chan *Result, concurrency)
+func NewPool(in chan Task, out chan Task, concurrency int) *Pool {
+	resChan := make([]chan Task, concurrency)
 	return &Pool{
-		tasks:           tasks,
+		in:              in,
 		concurrency:     concurrency,
-		results:         results,
+		out:             out,
 		resultsChannels: resChan,
 	}
 }
 
 func (p *Pool) Run() {
 	for i := 1; i <= p.concurrency; i++ {
-		results := make(chan *Result)
-		worker := NewWorker(p.tasks, results, i)
+		results := make(chan Task)
+		worker := NewWorker(p.in, results, i)
 		worker.Start(&p.wg)
 		p.resultsChannels = append(p.resultsChannels, results)
 	}
 
 	var wg sync.WaitGroup
-	output := func(c <-chan *Result) {
+	output := func(c <-chan Task) {
 		for r := range c {
-			p.results <- r
+			p.out <- r
 		}
 		wg.Done()
 	}
@@ -45,7 +45,7 @@ func (p *Pool) Run() {
 
 	go func() {
 		wg.Wait()
-		close(p.results)
+		close(p.out)
 	}()
 
 	p.wg.Wait()
